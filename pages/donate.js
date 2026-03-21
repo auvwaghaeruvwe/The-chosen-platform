@@ -6,12 +6,12 @@ import Footer from '../components/Footer'
 const AMOUNTS = [10, 25, 50, 100, 250, 500]
 
 const perks = [
-  { amount: 10,  perk: 'Supporter badge + thank you email'               },
-  { amount: 25,  perk: 'Above + name in our monthly donor list'           },
-  { amount: 50,  perk: 'Above + exclusive behind-the-scenes newsletter'   },
-  { amount: 100, perk: 'Above + priority request processing'              },
-  { amount: 250, perk: 'Above + personal thank you from the team'         },
-  { amount: 500, perk: 'Above + VIP recognition on the platform'          },
+  { amount: 10,  perk: 'Supporter badge + thank you email'             },
+  { amount: 25,  perk: 'Above + name in our monthly donor list'         },
+  { amount: 50,  perk: 'Above + exclusive behind-the-scenes newsletter' },
+  { amount: 100, perk: 'Above + priority request processing'            },
+  { amount: 250, perk: 'Above + personal thank you from the team'       },
+  { amount: 500, perk: 'Above + VIP recognition on the platform'        },
 ]
 
 export default function DonatePage() {
@@ -20,33 +20,36 @@ export default function DonatePage() {
   const [name, setName]       = useState('')
   const [email, setEmail]     = useState('')
   const [loading, setLoading] = useState(false)
+  const [error, setError]     = useState('')
 
   const finalAmount = custom ? Number(custom) : amount
 
   const handleDonate = async () => {
-    if (!name || !email) { alert('Please enter your name and email.'); return }
-    if (finalAmount < 1)  { alert('Please enter a valid amount.');       return }
+    if (!name || !email) { setError('Please enter your name and email.'); return }
+    if (finalAmount < 1)  { setError('Please enter a valid amount.');      return }
 
+    setError('')
     setLoading(true)
 
-    // ── Paystack inline payment ──────────────────────────────────────────────
-    // This loads the Paystack popup directly in the browser.
-    // Replace YOUR_PAYSTACK_PUBLIC_KEY with your real key from paystack.com
-    const PaystackPop = (await import('@paystack/inline-js')).default
-    const handler = PaystackPop.setup({
-      key:       process.env.NEXT_PUBLIC_PAYSTACK_KEY || 'pk_test_xxxxxxxxxxxxxxxxxxxxxxxxxx',
-      email:     email,
-      amount:    finalAmount * 100, // Paystack uses kobo/cents (multiply by 100)
-      currency:  'USD',
-      ref:       'CHOSEN_' + Date.now(),
-      metadata: { custom_fields: [{ display_name: 'Donor Name', variable_name: 'donor_name', value: name }] },
-      callback: response => {
-        setLoading(false)
-        alert(`Thank you, ${name}! Your donation of $${finalAmount} was received. Reference: ${response.reference}`)
-      },
-      onClose: () => setLoading(false),
-    })
-    handler.openIframe()
+    try {
+      // Call our API route to create a Stripe checkout session
+      const res = await fetch('/api/create-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: finalAmount, name, email }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) throw new Error(data.error || 'Something went wrong.')
+
+      // Redirect fan to Stripe checkout page
+      window.location.href = data.url
+
+    } catch (err) {
+      setError(err.message)
+      setLoading(false)
+    }
   }
 
   const inputStyle = {
@@ -82,7 +85,8 @@ export default function DonatePage() {
           Be Part of <span style={{ color: '#e8b84b' }}>Something</span> Eternal
         </h1>
         <p style={{ fontFamily: 'Crimson Pro, serif', color: '#8a9ab5', fontSize: '1.05rem', maxWidth: 500, margin: '0 auto', lineHeight: 1.8 }}>
-          The Chosen is 100% crowd-funded. Every dollar you give goes directly to production — the next episode, the next season, the next life changed.
+          The Chosen is 100% crowd-funded. Every dollar you give goes directly
+          to production — the next episode, the next season, the next life changed.
         </p>
       </section>
 
@@ -96,8 +100,8 @@ export default function DonatePage() {
           </h2>
           {perks.map((p, i) => (
             <div key={i} style={{
-              display: 'flex', alignItems: 'flex-start', gap: 20, marginBottom: 24,
-              padding: '18px 20px',
+              display: 'flex', alignItems: 'flex-start', gap: 20, marginBottom: 20,
+              padding: '16px 18px',
               background: finalAmount >= p.amount ? 'rgba(200,150,42,0.06)' : 'transparent',
               border: finalAmount >= p.amount ? '1px solid rgba(200,150,42,0.2)' : '1px solid transparent',
               borderRadius: 4, transition: 'all 0.3s',
@@ -114,6 +118,19 @@ export default function DonatePage() {
               </div>
             </div>
           ))}
+
+          {/* Large donation note */}
+          <div style={{ marginTop: 32, padding: '20px', background: 'rgba(13,23,48,0.8)', border: '1px solid rgba(200,150,42,0.12)', borderRadius: 4 }}>
+            <div style={{ fontFamily: 'Cinzel, serif', fontSize: '0.6rem', letterSpacing: '0.2em', color: '#c8962a', marginBottom: 8 }}>
+              LARGE DONATIONS
+            </div>
+            <p style={{ fontFamily: 'Crimson Pro, serif', color: '#8a9ab5', fontSize: '0.92rem', lineHeight: 1.7 }}>
+              For donations above $500 or bank transfers, please contact our team directly for safe and verified payment details.
+            </p>
+            <a href="mailto:management@gmail.com" style={{ display: 'inline-block', marginTop: 12, fontFamily: 'Cinzel, serif', fontSize: '0.6rem', letterSpacing: '0.15em', color: '#c8962a', textDecoration: 'none' }}>
+              CONTACT MANAGEMENT →
+            </a>
+          </div>
         </div>
 
         {/* RIGHT: Donation widget */}
@@ -160,23 +177,31 @@ export default function DonatePage() {
           </div>
 
           {/* Total */}
-          <div style={{ background: 'rgba(200,150,42,0.06)', border: '1px solid rgba(200,150,42,0.15)', borderRadius: 2, padding: '14px 18px', marginBottom: 22, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ background: 'rgba(200,150,42,0.06)', border: '1px solid rgba(200,150,42,0.15)', borderRadius: 2, padding: '14px 18px', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontFamily: 'Crimson Pro, serif', color: '#8a9ab5', fontSize: '0.9rem' }}>Your Contribution</span>
             <span style={{ fontFamily: 'Cinzel, serif', color: '#e8b84b', fontSize: '1.3rem', fontWeight: 700 }}>${finalAmount || 0}</span>
           </div>
 
+          {/* Error */}
+          {error && (
+            <div style={{ background: 'rgba(180,40,40,0.1)', border: '1px solid rgba(200,60,60,0.3)', borderRadius: 2, padding: '12px 16px', marginBottom: 16, fontFamily: 'Crimson Pro, serif', color: '#f08080', fontSize: '0.9rem' }}>
+              ⚠ {error}
+            </div>
+          )}
+
           {/* Donate button */}
           <button onClick={handleDonate} disabled={loading} style={{
-            width: '100%', padding: '15px', borderRadius: 2, border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
+            width: '100%', padding: '15px', borderRadius: 2, border: 'none',
+            cursor: loading ? 'not-allowed' : 'pointer',
             background: loading ? 'rgba(200,150,42,0.4)' : 'linear-gradient(135deg,#c8962a,#e8b84b)',
             color: '#080e1f', fontFamily: 'Cinzel, serif', fontSize: '0.68rem',
             letterSpacing: '0.12em', fontWeight: 700,
           }}>
-            {loading ? 'OPENING PAYMENT…' : `DONATE $${finalAmount || 0} NOW`}
+            {loading ? 'OPENING PAYMENT…' : `DONATE $${finalAmount || 0} SECURELY`}
           </button>
 
           <p style={{ textAlign: 'center', fontFamily: 'Crimson Pro, serif', color: '#8a9ab5', fontSize: '0.78rem', marginTop: 14, fontStyle: 'italic' }}>
-            Secure payment via Paystack · All currencies accepted
+            Secure payment via Stripe · All cards accepted worldwide
           </p>
         </div>
 
